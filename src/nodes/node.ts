@@ -3,7 +3,7 @@ import express from "express";
 import { BASE_NODE_PORT } from "../config";
 import { Value } from "../types";
 import { NodeState } from "../types"; 
-
+import { delay } from "../utils";
 
 
 export async function node(
@@ -28,6 +28,11 @@ export async function node(
     k: null,
     receivedValues: null
   };
+  let registry : string[] = [];
+
+  if (isFaulty){
+    nodeState = { ...nodeState, x: null, decided: null, k: null };
+  }
   node.get("/status", (req, res) => {
     // Check if this node is faulty
     if(isFaulty) {
@@ -49,27 +54,15 @@ export async function node(
   // TODO implement this
   // this route allows the node to receive messages from other nodes
   node.post("/message", (req, res) => {
-    if (nodeState.killed) {
-      res.status(400).send("Node is stopped");
-      return;
-    }
-  
-    const { value, step } = req.body;
-
-    // Assurez-vous que le message est pour l'étape actuelle et que le nœud n'est pas décidé
-    if (step === nodeState.k && nodeState.decided === false) {
-      // Supposons que `receivedValues` est initialisé correctement quelque part
-      if (!nodeState.receivedValues) {
-        nodeState.receivedValues = {} as Record<number, Record<string, number>>;
-      }
-
-     
-      
-      // Ici, vous pourriez implémenter une logique pour vérifier si une majorité est atteinte et mettre à jour `nodeState.x` et `nodeState.decided`
-    }
-  
-    res.status(200).send("Message reçu");
-});
+    const newMessage = req.body.message
+    
+    registry.push(newMessage);
+    nodeState.decided = true;
+    nodeState.x = 0;
+    if (nodeState.k !== null) { nodeState.k += 1; };
+    
+    res.status(200).json({ message: newMessage, registry : registry });
+  });
 
 
   
@@ -77,20 +70,37 @@ export async function node(
   // TODO implement this
   // this route is used to start the consensus algorithm
   node.get("/start", async (req, res) => {
-    if (nodeState.killed) {
-      res.status(400).send("Node is stopped");
-      return;
+    while(!nodesAreReady()){
+      await delay(100);
     }
-  
-    nodeState.x = initialValue;
-    nodeState.decided = false;
-    nodeState.k = 0;
-  
-    // Commencez à envoyer la valeur initiale aux autres nœuds et à écouter les réponses
-    // Cette logique dépendra de votre implémentation spécifique, par exemple, utiliser des requêtes HTTP POST pour envoyer des messages
-  
-    res.status(200).send("Consensus algorithm started");
+
+    nodeState.decided = true;
+    
+    for (let index = 0; index < N; index++) {
+      const nodePort = `localhost:${BASE_NODE_PORT + index}`;
+      const nodeState = await fetch(`${nodePort}/getState`).then((res) => res.json());
+
+      if(nodeState === 'live') {
+        // send message to node
+        const data = { message: "Hello" }
+        fetch(`${nodePort}/message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json'},
+          body: JSON.stringify(data)
+        })
+
+
+      } else {
+        console.log(`Node ${index} is not live`);
+      }
+      
+      
+      
+    }
+
+    res.status(200).send("start consensus");
   });
+
   
   
 
