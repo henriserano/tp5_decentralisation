@@ -31,7 +31,11 @@ export async function node(
   const node = express();
   node.use(express.json());
   node.use(bodyParser.json());
-  
+  let State = {value: Math.random() > 0.5 ? 1 : 0, // Initialisation aléatoire à 0 ou 1
+  decided: false,
+  phase: 1,
+  round: 1,
+  votes: new Map()}
   // TODO implement this
   // this route allows retrieving the current status of the node*
   let nodeState: NodeState = {
@@ -63,22 +67,21 @@ export async function node(
   // TODO implement this
   // this route allows the node to receive messages from other nodes
   node.post("/message", (req, res) => {
-    nodeState.k = 1;
     
-    if(!isFaulty){
-      const newMessage = req.body.message
-      registry.push(newMessage);
-      nodeState.decided = true;
-      nodeState.receivedValues = newMessage
-      nodeState.k += 1;  
-      sendmessage("Bonjour",nodeState.x,nodeState.receivedValues);
-      res.status(200).json({ message: newMessage, registry : registry });
-    }
+    if(nodeState.killed != null){
 
-    else{
-      nodeState.decided = false;
+    nodeState.decided = true;
+    const newMessage = req.body.message
+    nodeState.receivedValues = newMessage;
+      
+    if (nodeState.k !== null) {
+        nodeState.k += 1;  
     }
-    
+   
+    registry.push(newMessage);
+    res.status(200).json({ message: newMessage, registry : registry });
+  
+  }
     
   });
 
@@ -91,10 +94,10 @@ export async function node(
     while(!nodesAreReady()){
       await delay(100);
     }
-
-    nodeState.decided = true;
-    
-
+    nodeState.receivedValues = Math.random() > 0.5 ? 1 : 0;
+    nodeState.k = 1;  
+    nodeState.decided = null;
+    sendmessage("Bonjour",nodeId,nodeState.receivedValues);
     res.status(200).send("start consensus");
   });
 
