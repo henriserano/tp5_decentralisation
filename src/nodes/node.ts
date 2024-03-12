@@ -5,6 +5,19 @@ import { Value } from "../types";
 import { NodeState } from "../types"; 
 import { delay } from "../utils";
 
+export async function sendmessage( message: string,nodeid: any, valeur: any)
+{
+  await fetch(`http://localhost:${BASE_NODE_PORT + nodeid}/message`,
+  {
+    method:'POST',
+    body:JSON.stringify({
+      message:message,
+      valeur:valeur,
+      nodeid:nodeid
+    })
+  })
+}
+
 
 export async function node(
   nodeId: number, // the ID of the node
@@ -18,14 +31,14 @@ export async function node(
   const node = express();
   node.use(express.json());
   node.use(bodyParser.json());
-
+  
   // TODO implement this
   // this route allows retrieving the current status of the node*
   let nodeState: NodeState = {
     killed: false,
-    x: initialValue, // Assuming initialValue matches the NodeState x type
+    x: 1, // Assuming initialValue matches the NodeState x type
     decided: null,
-    k: null,
+    k:1,
     receivedValues: null
   };
   let registry : string[] = [];
@@ -36,15 +49,11 @@ export async function node(
   node.get("/status", (req, res) => {
     // Check if this node is faulty
     if(isFaulty) {
-      // If the node is faulty, respond with a 500 status code and "faulty" message
       res.status(500).send("faulty");
     } else {
-      // Otherwise, check if all nodes are ready to ensure the network is operational
       if(!nodesAreReady()){
-        // If not all nodes are ready, perhaps consider this a different status or handle accordingly
         res.status(503).send("nodes not ready"); // Using 503 Service Unavailable as a more accurate status
       } else {
-        // If the node is not faulty and all nodes are ready, respond with a 200 status code and "live" message
         res.status(200).send("live");
       }
     }
@@ -54,14 +63,23 @@ export async function node(
   // TODO implement this
   // this route allows the node to receive messages from other nodes
   node.post("/message", (req, res) => {
-    const newMessage = req.body.message
+    nodeState.k = 1;
     
-    registry.push(newMessage);
-    nodeState.decided = true;
-    nodeState.x = 0;
-    if (nodeState.k !== null) { nodeState.k += 1; };
+    if(!isFaulty){
+      const newMessage = req.body.message
+      registry.push(newMessage);
+      nodeState.decided = true;
+      nodeState.receivedValues = newMessage
+      nodeState.k += 1;  
+      sendmessage("Bonjour",nodeState.x,nodeState.receivedValues);
+      res.status(200).json({ message: newMessage, registry : registry });
+    }
+
+    else{
+      nodeState.decided = false;
+    }
     
-    res.status(200).json({ message: newMessage, registry : registry });
+    
   });
 
 
@@ -76,27 +94,6 @@ export async function node(
 
     nodeState.decided = true;
     
-    for (let index = 0; index < N; index++) {
-      const nodePort = `localhost:${BASE_NODE_PORT + index}`;
-      const nodeState = await fetch(`${nodePort}/getState`).then((res) => res.json());
-
-      if(nodeState === 'live') {
-        // send message to node
-        const data = { message: "Hello" }
-        fetch(`${nodePort}/message`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json'},
-          body: JSON.stringify(data)
-        })
-
-
-      } else {
-        console.log(`Node ${index} is not live`);
-      }
-      
-      
-      
-    }
 
     res.status(200).send("start consensus");
   });
